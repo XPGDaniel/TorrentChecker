@@ -1,11 +1,12 @@
 ﻿using BencodeNET;
 using BencodeNET.Objects;
+using ByteSizeLib;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
+//using System.Security.Cryptography;
 using System.Text;
 
 namespace TorrentChecker
@@ -14,16 +15,33 @@ namespace TorrentChecker
     {
         static void Main(string[] args)
         {
-            int TotalLines = 0, Damaged = 0, OK = 0;
+            int TotalLines = 0, Invalid = 0, OK = 0, Skipped = 0;
             long TotalBytes = 0;
+            bool Rename = false;
             string checksumfile = new FileInfo(System.Reflection.Assembly.GetEntryAssembly().Location).Directory.FullName;
-            string output = checksumfile + "\\output_" + DateTime.Now.ToString("yyyy-MM-dd") + ".txt";
+            string output = checksumfile + "\\TorrentCheck_" + DateTime.Now.ToString("yyyy-MM-dd_HH：mm") + ".txt";
             List<FileStruct> lists = new List<FileStruct>();
             List<string> TorrentList = GetFiles(checksumfile, "*.torrent");
+            Console.WriteLine("Rename torrent after the check ? (y/n) : ");
+            try
+            {
+                string response = Console.ReadLine().ToLowerInvariant();
+                if (response.Length == 1)
+                {
+                    if (response == "y")
+                        Rename = true;
+                    else
+                        Rename = false;
+                }
+            }
+            catch (Exception)
+            {
+                Rename = false;
+            }
             //if (!File.Exists(output))
             //{
-                using (FileStream file = File.Create(output))
-                { }
+            using (FileStream file = File.Create(output))
+            { }
             //}
             Console.WriteLine("No. of torrents : " + TorrentList.Count);
             //if (args.Length == 1)
@@ -39,40 +57,49 @@ namespace TorrentChecker
             //}
             //for (int i = StartingPoint; i < TorrentList.Count; i++)
             //{
-                //string[] lines = File.ReadAllLines(TorrentList[i]);
-                foreach (string Torrent in TorrentList)
+            foreach (string Torrent in TorrentList)
+            {
+                //Console.WriteLine("Torrent found : " + Path.GetFileName(Torrent));
+                if (!string.IsNullOrEmpty(Torrent.Trim()))
                 {
-                    Console.WriteLine("Torrent found : " + Path.GetFileName(Torrent));
-                    if (!string.IsNullOrEmpty(Torrent.Trim()))
-                    {
-                        TotalLines++;
-                        FileStruct fs = new FileStruct();
-                        fs.infohash = Path.GetFileNameWithoutExtension(Torrent);
-                        //fs.filepath = new FileInfo(TorrentList[i]).Directory.FullName + "\\" + Torrent.Trim().Split('*')[1].Trim();
-                        fs.filepath = Torrent;
-                        lists.Add(fs);
-                    }
+                    TotalLines++;
+                    FileStruct fs = new FileStruct();
+                    fs.infohash = Path.GetFileNameWithoutExtension(Torrent);
+                    fs.filepath = Torrent;
+                    lists.Add(fs);
                 }
-                int i = 0;
-                if (lists.Any())
+            }
+            int i = 0;
+            if (lists.Any())
+            {
+                foreach (FileStruct fss in lists)
                 {
-                    foreach (FileStruct fss in lists)
-                    {
-                        using (System.IO.StreamWriter file = File.AppendText(output))
-                        {
-                            file.WriteLine(Convert.ToString(i + 1) + "/" + TorrentList.Count + "\t" + TorrentList[i].Split('\'')[TorrentList[i].Split('\'').Length - 1] + " Verifying...");
-                        }
-                        TorrentFile torrent = Bencode.DecodeTorrentFile(fss.filepath);
-                        if (fss.infohash.ToLowerInvariant() == torrent.CalculateInfoHash().ToLowerInvariant())
-                        {
-                            BString CorrentName = (BString)torrent.Info["name"];
+                    //using (System.IO.StreamWriter file = File.AppendText(output))
+                    //{
+                    //    file.WriteLine(Convert.ToString(i + 1) + "/" + TorrentList.Count + "\t" + TorrentList[i].Split('\'')[TorrentList[i].Split('\'').Length - 1] + " checking...");
+                    //}
+                    TorrentFile torrent = Bencode.DecodeTorrentFile(fss.filepath);
+                    //if (fss.infohash.ToLowerInvariant() == torrent.CalculateInfoHash().ToLowerInvariant())
+                    //{
+                    //}
+                    //else
+                    //{
+                    //    using (StreamWriter file = File.AppendText(output))
+                    //    {
+                    //        file.WriteLine("Skipped \t" + Path.GetFileName(fss.filepath));
+                    //    }
+                    //    Skipped++;
+                    //}
+                        BString CorrentName = (BString)torrent.Info["name"];
 
-                            // Calculate info hash (e.g. "B415C913643E5FF49FE37D304BBB5E6E11AD5101")
-                            //string infoHash = torrent.CalculateInfoHash();
+                        // Calculate info hash (e.g. "B415C913643E5FF49FE37D304BBB5E6E11AD5101")
+                        //string infoHash = torrent.CalculateInfoHash();
 
-                            // Get name and size of each file in 'files' list of 'info' dictionary ("multi-file mode")
-                            BList files = (BList)torrent.Info["files"];
-                            long SubSum = 0;
+                        // Get name and size of each file in 'files' list of 'info' dictionary ("multi-file mode")
+                        BList files = (BList)torrent.Info["files"];
+                        long SubSum = 0;
+                        if (files != null) //multi-files
+                        {
                             foreach (BDictionary file in files)
                             {
                                 // File size in bytes (BNumber has implicit conversion to int and long)
@@ -87,62 +114,69 @@ namespace TorrentChecker
                                 // Converts fileName (BString = bytes) to a string
                                 //string fileNameString = fileName.ToString(Encoding.UTF8);
                             }
-                            Console.WriteLine("Space needed : " + SubSum + " Bytes");
-                            TotalBytes += SubSum;
-                            string NewName = "";
-                            try
+                        }
+                        else //single files
+                        {
+                            SubSum += (BNumber)torrent.Info["length"];
+                        }
+                        Console.WriteLine("Space needed : " + ByteSize.FromBytes(SubSum).ToString());
+                        TotalBytes += SubSum;
+                        string NewName = "";
+                        try
+                        {
+                            if (Rename)
                             {
                                 NewName = fss.filepath.Replace(Path.GetFileNameWithoutExtension(fss.filepath), CorrentName.ToString(Encoding.UTF8));
                                 File.Move(fss.filepath, NewName);
                                 Console.WriteLine("Rename to " + Path.GetFileName(NewName));
                                 using (StreamWriter file = File.AppendText(output))
                                 {
-                                    file.WriteLine("OK \t" + Path.GetFileName(NewName) + "\t" + Path.GetFileName(fss.filepath));
+                                    file.WriteLine("Rename OK \t" + Path.GetFileName(NewName) + "\t" + ByteSize.FromBytes(SubSum).ToString() + "\t" + Path.GetFileName(fss.filepath));
                                 }
-                                OK++;
                             }
-                            catch (Exception ex )
+                            else
                             {
-                                Console.WriteLine("Rename to " + Path.GetFileName(NewName) + " has failed.");
-                                Console.WriteLine(ex.ToString());
                                 using (StreamWriter file = File.AppendText(output))
                                 {
-                                    file.WriteLine("Rename NG \t" + Path.GetFileName(NewName) + "\t" + Path.GetFileName(fss.filepath));
+                                    file.WriteLine("OK \t" + Path.GetFileName(fss.filepath) + "\t" + ByteSize.FromBytes(SubSum).ToString());
                                 }
-                                Damaged++;
                             }
+                            OK++;
                         }
-                        else
+                        catch (Exception ex)
                         {
+                            Console.WriteLine("Rename to " + Path.GetFileName(NewName) + " has failed.");
+                            Console.WriteLine(ex.ToString());
                             using (StreamWriter file = File.AppendText(output))
                             {
-                                file.WriteLine("Invalid \t" + Path.GetFileName(fss.filepath));
+                                file.WriteLine("Rename NG \t" + Path.GetFileName(NewName) + "\t" + Path.GetFileName(fss.filepath));
                             }
-                            Damaged++;
+                            Invalid++;
                         }
-                        Console.WriteLine(Convert.ToString(i + 1) + "/" + TorrentList.Count + "\t" + TorrentList[i].Split('\'')[TorrentList[i].Split('\'').Length - 1] + " Checked.");
-                        TaskbarProgress.SetValue(Process.GetCurrentProcess().MainWindowHandle, ((i + 1) * 200 + lists.Count) / (lists.Count * 2), 100);
-                        TaskbarProgress.SetState(Process.GetCurrentProcess().MainWindowHandle, TaskbarProgress.TaskbarStates.Normal);
-                        i++;
-                    }
-                    using (StreamWriter file = File.AppendText(output))
-                    {
-                        file.WriteLine("Verification Completed");
-                        file.WriteLine("----------------------");
-                    }
-                    lists.Clear();
+                    Console.WriteLine(Convert.ToString(i + 1) + "/" + TorrentList.Count + "\t" + TorrentList[i].Split('\'')[TorrentList[i].Split('\'').Length - 1] + " Checked.");
+                    TaskbarProgress.SetValue(Process.GetCurrentProcess().MainWindowHandle, ((i + 1) * 200 + lists.Count) / (lists.Count * 2), 100);
+                    TaskbarProgress.SetState(Process.GetCurrentProcess().MainWindowHandle, TaskbarProgress.TaskbarStates.Normal);
+                    i++;
                 }
+                using (StreamWriter file = File.AppendText(output))
+                {
+                    file.WriteLine("Check Completed");
+                    file.WriteLine("----------------------");
+                }
+                lists.Clear();
+            }
             //}
             using (StreamWriter file = File.AppendText(output))
             {
+                file.WriteLine("Total space needed : " + ByteSize.FromBytes(TotalBytes).ToString());
                 file.WriteLine("Total files checked : " + TotalLines);
-                file.WriteLine("Good : " + OK + ", Invalid : " + Damaged);
-                file.WriteLine("Completed  @ " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                file.WriteLine("Good : " + OK + ", Invalid : " + Invalid + ", Skipped : " + Skipped);
+                //file.WriteLine("Completed  @ " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             }
-            Console.WriteLine("Total space needed : " + TotalBytes + " Bytes");
+            Console.WriteLine("Total space needed : " + ByteSize.FromBytes(TotalBytes).ToString());
             Console.WriteLine("Total files checked : " + TotalLines);
-            Console.WriteLine("Good : " + OK + ", Invalid : " + Damaged);
-            Console.WriteLine("Completed  @ " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            Console.WriteLine("Good : " + OK + ", Invalid : " + Invalid + ", Skipped : " + Skipped);
+            //Console.WriteLine("Completed  @ " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             Console.ReadKey();
         }
         static private List<string> GetFiles(string path, string pattern)

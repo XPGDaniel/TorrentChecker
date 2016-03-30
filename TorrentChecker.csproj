@@ -52,6 +52,10 @@
       <HintPath>packages\BencodeNET.1.2.1\lib\net40\BencodeNET.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="ByteSizeLib, Version=0.2.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\ByteSize.1.1.2\lib\portable-net4+sl5+netcore45+wp8+MonoAndroid1+MonoTouch1\ByteSizeLib.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Windows.Forms" />
