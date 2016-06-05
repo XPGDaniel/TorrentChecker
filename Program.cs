@@ -126,7 +126,7 @@ namespace TorrentChecker
                         {
                             if (Rename)
                             {
-                                NewName = fss.filepath.Replace(Path.GetFileNameWithoutExtension(fss.filepath), CorrentName.ToString(Encoding.UTF8));
+                                NewName = fss.filepath.Replace(Path.GetFileNameWithoutExtension(fss.filepath), CorrentName.ToString(Encoding.UTF8)).Replace("\"", "'").Replace('?', '？');
                                 File.Move(fss.filepath, NewName);
                                 Console.WriteLine("Rename to " + Path.GetFileName(NewName));
                                 using (StreamWriter file = File.AppendText(output))
@@ -171,12 +171,10 @@ namespace TorrentChecker
                 file.WriteLine("Total space needed : " + ByteSize.FromBytes(TotalBytes).ToString());
                 file.WriteLine("Total files checked : " + TotalLines);
                 file.WriteLine("Good : " + OK + ", Invalid : " + Invalid + ", Skipped : " + Skipped);
-                //file.WriteLine("Completed  @ " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             }
             Console.WriteLine("Total space needed : " + ByteSize.FromBytes(TotalBytes).ToString());
             Console.WriteLine("Total files checked : " + TotalLines);
             Console.WriteLine("Good : " + OK + ", Invalid : " + Invalid + ", Skipped : " + Skipped);
-            //Console.WriteLine("Completed  @ " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             Console.ReadKey();
         }
         static private List<string> GetFiles(string path, string pattern)
