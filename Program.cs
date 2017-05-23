@@ -1,12 +1,11 @@
-﻿using BencodeNET;
-using BencodeNET.Objects;
+﻿using BencodeNET.Parsing;
+using BencodeNET.Torrents;
 using ByteSizeLib;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-//using System.Security.Cryptography;
 using System.Text;
 
 namespace TorrentChecker
@@ -15,6 +14,7 @@ namespace TorrentChecker
     {
         static void Main(string[] args)
         {
+            Console.OutputEncoding = Encoding.Unicode;
             int TotalLines = 0, Invalid = 0, OK = 0, Skipped = 0;
             long TotalBytes = 0;
             bool Rename = false;
@@ -22,6 +22,7 @@ namespace TorrentChecker
             string output = checksumfile + "\\TorrentCheck_" + DateTime.Now.ToString("yyyy-MM-dd_HH：mm") + ".txt";
             List<FileStruct> lists = new List<FileStruct>();
             List<string> TorrentList = GetFiles(checksumfile, "*.torrent");
+            BencodeParser parser = new BencodeParser();
             Console.WriteLine("Rename torrent after the check ? (y/n) : ");
             try
             {
@@ -38,34 +39,19 @@ namespace TorrentChecker
             {
                 Rename = false;
             }
-            //if (!File.Exists(output))
-            //{
             using (FileStream file = File.Create(output))
             { }
-            //}
             Console.WriteLine("No. of torrents : " + TorrentList.Count);
-            //if (args.Length == 1)
-            //{
-            //    if (args[0].ToString().ToLowerInvariant().Contains(".torrent"))
-            //    {
-            //        StartingPoint = TorrentList.FindIndex(a => a.ToLowerInvariant() == args[0].ToString().ToLowerInvariant());
-            //    }
-            //    else
-            //    {
-            //        StartingPoint = TorrentList.FindIndex(a => a.ToLowerInvariant() == args[0].ToString().ToLowerInvariant() + ".torrent");
-            //    }
-            //}
-            //for (int i = StartingPoint; i < TorrentList.Count; i++)
-            //{
             foreach (string Torrent in TorrentList)
             {
-                //Console.WriteLine("Torrent found : " + Path.GetFileName(Torrent));
                 if (!string.IsNullOrEmpty(Torrent.Trim()))
                 {
                     TotalLines++;
-                    FileStruct fs = new FileStruct();
-                    fs.infohash = Path.GetFileNameWithoutExtension(Torrent);
-                    fs.filepath = Torrent;
+                    FileStruct fs = new FileStruct()
+                    {
+                        infohash = Path.GetFileNameWithoutExtension(Torrent),
+                        filepath = Torrent
+                    };
                     lists.Add(fs);
                 }
             }
@@ -74,11 +60,7 @@ namespace TorrentChecker
             {
                 foreach (FileStruct fss in lists)
                 {
-                    //using (System.IO.StreamWriter file = File.AppendText(output))
-                    //{
-                    //    file.WriteLine(Convert.ToString(i + 1) + "/" + TorrentList.Count + "\t" + TorrentList[i].Split('\'')[TorrentList[i].Split('\'').Length - 1] + " checking...");
-                    //}
-                    TorrentFile torrent = Bencode.DecodeTorrentFile(fss.filepath);
+                    Torrent torrent = parser.Parse<Torrent>(fss.filepath);
                     //if (fss.infohash.ToLowerInvariant() == torrent.CalculateInfoHash().ToLowerInvariant())
                     //{
                     //}
@@ -90,26 +72,26 @@ namespace TorrentChecker
                     //    }
                     //    Skipped++;
                     //}
-                        BString CorrentName = (BString)torrent.Info["name"];
+                        string CorrentName = torrent.DisplayName;
 
                         // Calculate info hash (e.g. "B415C913643E5FF49FE37D304BBB5E6E11AD5101")
                         //string infoHash = torrent.CalculateInfoHash();
 
                         // Get name and size of each file in 'files' list of 'info' dictionary ("multi-file mode")
-                        BList files = (BList)torrent.Info["files"];
+                        MultiFileInfoList files = torrent.Files;
                         long SubSum = 0;
                         if (files != null) //multi-files
                         {
-                            foreach (BDictionary file in files)
+                            foreach (MultiFileInfo file in files)
                             {
                                 // File size in bytes (BNumber has implicit conversion to int and long)
-                                SubSum += (BNumber)file["length"];
+                                SubSum += file.FileSize;
 
                                 // List of all parts of the file path. 'dir1/dir2/file.ext' => dir1, dir2 and file.ext
-                                BList path = (BList)file["path"];
+                                //string path = file.FullPath;
 
                                 // Last element is the file name
-                                BString fileName = (BString)path.Last();
+                                //BString fileName = (BString)path.Last();
 
                                 // Converts fileName (BString = bytes) to a string
                                 //string fileNameString = fileName.ToString(Encoding.UTF8);
@@ -117,16 +99,16 @@ namespace TorrentChecker
                         }
                         else //single files
                         {
-                            SubSum += (BNumber)torrent.Info["length"];
+                            SubSum += torrent.File.FileSize;
                         }
-                        Console.WriteLine("Space needed : " + ByteSize.FromBytes(SubSum).ToString());
+                        Console.WriteLine(CorrentName + " Space needed : " + ByteSize.FromBytes(SubSum).ToString());
                         TotalBytes += SubSum;
                         string NewName = "";
                         try
                         {
                             if (Rename)
                             {
-                                NewName = fss.filepath.Replace(Path.GetFileNameWithoutExtension(fss.filepath), CorrentName.ToString(Encoding.UTF8)).Replace("\"", "'").Replace('?', '？');
+                                NewName = fss.filepath.Replace(Path.GetFileNameWithoutExtension(fss.filepath), CorrentName).Replace("\"", "'").Replace('?', '？');
                                 File.Move(fss.filepath, NewName);
                                 Console.WriteLine("Rename to " + Path.GetFileName(NewName));
                                 using (StreamWriter file = File.AppendText(output))
@@ -153,7 +135,7 @@ namespace TorrentChecker
                             }
                             Invalid++;
                         }
-                    Console.WriteLine(Convert.ToString(i + 1) + "/" + TorrentList.Count + "\t" + TorrentList[i].Split('\'')[TorrentList[i].Split('\'').Length - 1] + " Checked.");
+                    Console.WriteLine(Convert.ToString(i + 1) + "/" + TorrentList.Count + "\t" + Path.GetFileName(TorrentList[i]) + " Checked.");
                     TaskbarProgress.SetValue(Process.GetCurrentProcess().MainWindowHandle, ((i + 1) * 200 + lists.Count) / (lists.Count * 2), 100);
                     TaskbarProgress.SetState(Process.GetCurrentProcess().MainWindowHandle, TaskbarProgress.TaskbarStates.Normal);
                     i++;
@@ -165,7 +147,6 @@ namespace TorrentChecker
                 }
                 lists.Clear();
             }
-            //}
             using (StreamWriter file = File.AppendText(output))
             {
                 file.WriteLine("Total space needed : " + ByteSize.FromBytes(TotalBytes).ToString());
@@ -194,15 +175,5 @@ namespace TorrentChecker
 
             return files;
         }
-        //static string computeMD5(string path)
-        //{
-        //    using (var md5 = MD5.Create())
-        //    {
-        //        using (var stream = File.OpenRead(path))
-        //        {
-        //            return BitConverter.ToString(md5.ComputeHash(stream)).Replace("-", "").ToLower();
-        //        }
-        //    }
-        //}
     }
 }
