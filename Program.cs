@@ -23,10 +23,10 @@ namespace TorrentChecker
             List<FileStruct> lists = new List<FileStruct>();
             List<string> TorrentList = GetFiles(checksumfile, "*.torrent");
             BencodeParser parser = new BencodeParser();
-            Console.WriteLine("Rename torrent after the check ? (y/n) : ");
+            Console.WriteLine("Rename torrent after validation check ? (y/n) : ");
             try
             {
-                string response = Console.ReadLine().ToLowerInvariant();
+                string response = Console.ReadLine().ToLowerInvariant().Trim();
                 if (response.Length == 1)
                 {
                     if (response == "y")
@@ -60,6 +60,7 @@ namespace TorrentChecker
             {
                 foreach (FileStruct fss in lists)
                 {
+                    Console.WriteLine("Parsing : " + fss.filepath);
                     Torrent torrent = parser.Parse<Torrent>(fss.filepath);
                     //if (fss.infohash.ToLowerInvariant() == torrent.CalculateInfoHash().ToLowerInvariant())
                     //{
@@ -72,69 +73,69 @@ namespace TorrentChecker
                     //    }
                     //    Skipped++;
                     //}
-                        string CorrentName = torrent.DisplayName;
+                    string CorrentName = torrent.DisplayName;
 
-                        // Calculate info hash (e.g. "B415C913643E5FF49FE37D304BBB5E6E11AD5101")
-                        //string infoHash = torrent.CalculateInfoHash();
+                    // Calculate info hash (e.g. "B415C913643E5FF49FE37D304BBB5E6E11AD5101")
+                    //string infoHash = torrent.CalculateInfoHash();
 
-                        // Get name and size of each file in 'files' list of 'info' dictionary ("multi-file mode")
-                        MultiFileInfoList files = torrent.Files;
-                        long SubSum = 0;
-                        if (files != null) //multi-files
+                    // Get name and size of each file in 'files' list of 'info' dictionary ("multi-file mode")
+                    MultiFileInfoList files = torrent.Files;
+                    long SubSum = 0;
+                    if (files != null) //multi-files
+                    {
+                        foreach (MultiFileInfo file in files)
                         {
-                            foreach (MultiFileInfo file in files)
-                            {
-                                // File size in bytes (BNumber has implicit conversion to int and long)
-                                SubSum += file.FileSize;
+                            // File size in bytes (BNumber has implicit conversion to int and long)
+                            SubSum += file.FileSize;
 
-                                // List of all parts of the file path. 'dir1/dir2/file.ext' => dir1, dir2 and file.ext
-                                //string path = file.FullPath;
+                            // List of all parts of the file path. 'dir1/dir2/file.ext' => dir1, dir2 and file.ext
+                            //string path = file.FullPath;
 
-                                // Last element is the file name
-                                //BString fileName = (BString)path.Last();
+                            // Last element is the file name
+                            //BString fileName = (BString)path.Last();
 
-                                // Converts fileName (BString = bytes) to a string
-                                //string fileNameString = fileName.ToString(Encoding.UTF8);
-                            }
+                            // Converts fileName (BString = bytes) to a string
+                            //string fileNameString = fileName.ToString(Encoding.UTF8);
                         }
-                        else //single files
+                    }
+                    else //single files
+                    {
+                        SubSum += torrent.File.FileSize;
+                    }
+                    Console.WriteLine(CorrentName + " Space needed : " + ByteSize.FromBytes(SubSum).ToString());
+                    TotalBytes += SubSum;
+                    string NewName = "";
+                    try
+                    {
+                        if (Rename)
                         {
-                            SubSum += torrent.File.FileSize;
-                        }
-                        Console.WriteLine(CorrentName + " Space needed : " + ByteSize.FromBytes(SubSum).ToString());
-                        TotalBytes += SubSum;
-                        string NewName = "";
-                        try
-                        {
-                            if (Rename)
-                            {
-                                NewName = fss.filepath.Replace(Path.GetFileNameWithoutExtension(fss.filepath), CorrentName).Replace("\"", "'").Replace('?', '？');
-                                File.Move(fss.filepath, NewName);
-                                Console.WriteLine("Rename to " + Path.GetFileName(NewName));
-                                using (StreamWriter file = File.AppendText(output))
-                                {
-                                    file.WriteLine("Rename OK \t" + Path.GetFileName(NewName) + "\t" + ByteSize.FromBytes(SubSum).ToString() + "\t" + Path.GetFileName(fss.filepath));
-                                }
-                            }
-                            else
-                            {
-                                using (StreamWriter file = File.AppendText(output))
-                                {
-                                    file.WriteLine("OK \t" + Path.GetFileName(fss.filepath) + "\t" + ByteSize.FromBytes(SubSum).ToString());
-                                }
-                            }
-                            OK++;
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine("Rename to " + Path.GetFileName(NewName) + " has failed.");
-                            Console.WriteLine(ex.ToString());
+                            NewName = fss.filepath.Replace(Path.GetFileNameWithoutExtension(fss.filepath), CorrentName).Replace("\"", "'").Replace('?', '？');
+                            File.Move(fss.filepath, NewName);
+                            Console.WriteLine("Rename to " + Path.GetFileName(NewName));
                             using (StreamWriter file = File.AppendText(output))
                             {
-                                file.WriteLine("Rename NG \t" + Path.GetFileName(NewName) + "\t" + Path.GetFileName(fss.filepath));
+                                file.WriteLine("Rename OK \t" + Path.GetFileName(NewName) + "\t" + ByteSize.FromBytes(SubSum).ToString() + "\t" + Path.GetFileName(fss.filepath));
                             }
-                            Invalid++;
                         }
+                        else
+                        {
+                            using (StreamWriter file = File.AppendText(output))
+                            {
+                                file.WriteLine("OK \t" + Path.GetFileName(fss.filepath) + "\t" + ByteSize.FromBytes(SubSum).ToString());
+                            }
+                        }
+                        OK++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Rename to " + Path.GetFileName(NewName) + " has failed.");
+                        Console.WriteLine(ex.ToString());
+                        using (StreamWriter file = File.AppendText(output))
+                        {
+                            file.WriteLine("Rename NG \t" + Path.GetFileName(NewName) + "\t" + Path.GetFileName(fss.filepath));
+                        }
+                        Invalid++;
+                    }
                     Console.WriteLine(Convert.ToString(i + 1) + "/" + TorrentList.Count + "\t" + Path.GetFileName(TorrentList[i]) + " Checked.");
                     TaskbarProgress.SetValue(Process.GetCurrentProcess().MainWindowHandle, ((i + 1) * 200 + lists.Count) / (lists.Count * 2), 100);
                     TaskbarProgress.SetState(Process.GetCurrentProcess().MainWindowHandle, TaskbarProgress.TaskbarStates.Normal);
